@@ -29,6 +29,7 @@ type Server struct {
 	register   chan *Client
 	unregister chan *Client
 	mu         sync.Mutex
+	history    [][]byte
 }
 
 // NewServer creates and returns a new Server
@@ -38,6 +39,7 @@ func NewServer() *Server {
 		broadcast:  make(chan []byte),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		history:    make([][]byte, 0, 10),
 	}
 }
 
@@ -49,8 +51,17 @@ func (s *Server) Run() {
 			s.mu.Lock()
 			s.clients[client] = true
 			s.mu.Unlock()
-			fmt.Println("New client connected. Total:", len(s.clients))
 
+			// Send history to the new client
+			if len(s.history) > 0 {
+				client.send <- []byte("--- Last messages ---")
+				for _, msg := range s.history {
+					client.send <- msg
+				}
+				client.send <- []byte("--- End of history ---")
+			}
+
+			fmt.Println("New client connected. Total:", len(s.clients))
 		case client := <-s.unregister:
 			s.mu.Lock()
 			if _, ok := s.clients[client]; ok {
@@ -61,6 +72,12 @@ func (s *Server) Run() {
 			fmt.Println("Client disconnected. Total:", len(s.clients))
 
 		case message := <-s.broadcast:
+			// Save to history, keep only last 10
+			s.history = append(s.history, message)
+			if len(s.history) > 10 {
+				s.history = s.history[1:] // remove oldest
+			}
+
 			s.mu.Lock()
 			for client := range s.clients {
 				select {
