@@ -1,0 +1,7 @@
+# Built binary
+broadcast-server
+broadcast-server.exe
+
+# Go workspace file
+go.work
+go.work.sum
