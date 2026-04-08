@@ -18,8 +18,9 @@ var upgrader = websocket.Upgrader{
 
 // Client represents a single connected WebSocket client
 type Client struct {
-	conn *websocket.Conn
-	send chan []byte
+	conn     *websocket.Conn
+	send     chan []byte
+	username string
 }
 
 // Server holds all connected clients
@@ -111,6 +112,10 @@ func (s *Server) HandleConnection(w http.ResponseWriter, r *http.Request) {
 // readPump reads messages from the client and sends them to broadcast
 func (c *Client) readPump(s *Server) {
 	defer func() {
+		// Broadcast leave message
+		if c.username != "" {
+			s.broadcast <- []byte(c.username + " has left the chat.")
+		}
 		s.unregister <- c
 		c.conn.Close()
 	}()
@@ -118,8 +123,18 @@ func (c *Client) readPump(s *Server) {
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
-			break // client disconnected or error
+			break
 		}
+
+		text := string(message)
+
+		// Handle JOIN message
+		if len(text) > 5 && text[:5] == "JOIN:" {
+			c.username = text[5:]
+			s.broadcast <- []byte(c.username + " has joined the chat!")
+			continue
+		}
+
 		s.broadcast <- message
 	}
 }

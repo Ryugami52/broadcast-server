@@ -33,6 +33,12 @@ var connectCmd = &cobra.Command{
 		}
 		defer conn.Close()
 
+		// Send JOIN message to server
+		conn.WriteMessage(websocket.TextMessage, []byte("JOIN:"+username))
+
+		fmt.Printf("Connected as %s!\n", username)
+		fmt.Println("Type a message and press Enter to send:")
+
 		fmt.Printf("Connected as %s!\n", username)
 		fmt.Println("Type a message and press Enter to send:")
 
@@ -47,8 +53,14 @@ var connectCmd = &cobra.Command{
 					fmt.Println("Disconnected from server.")
 					return
 				}
+				text := string(message)
 				t := time.Now().Format("15:04:05")
-				fmt.Printf(">> [%s] %s\n", t, string(message))
+
+				// Show join/leave without >> prefix
+				if len(text) > 5 && text[:5] == "JOIN:" {
+					continue // skip, server handles it
+				}
+				fmt.Printf(">> [%s] %s\n", t, text)
 			}
 		}()
 
