@@ -123,7 +123,19 @@ func (c *Client) readPump(s *Server) {
 		}
 
 		text := string(message)
-
+		// Handle LIST
+		if text == "LIST:" {
+			s.mu.Lock()
+			users := []string{}
+			for client := range s.clients {
+				if client.username != "" {
+					users = append(users, client.username)
+				}
+			}
+			s.mu.Unlock()
+			c.send <- []byte("SYSTEM:Online users: " + strings.Join(users, ", "))
+			continue
+		}
 		// Handle JOIN
 		if strings.HasPrefix(text, "JOIN:") {
 			c.username = text[5:]

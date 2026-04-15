@@ -170,6 +170,15 @@ var connectCmd = &cobra.Command{
 				continue
 			}
 
+			if text == "/list" {
+				err := conn.WriteMessage(websocket.TextMessage, []byte("LIST:"))
+				if err != nil {
+					log.Println("Send error:", err)
+					break
+				}
+				continue
+			}
+
 			// Send message based on current mode
 			if mode == "private" {
 				msg := fmt.Sprintf("PRIVATE:%s:%s", privateTarget, text)
