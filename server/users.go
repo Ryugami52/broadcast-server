@@ -1,65 +1,77 @@
 package server
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
-	"os"
-	"regexp"
-	"strings"
+	"time"
 	"unicode"
 
+	"strings"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type User struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Phone    string `json:"phone"`
-	Password string `json:"password"` // hashed
+	Username  string    `bson:"username"`
+	Email     string    `bson:"email"`
+	Phone     string    `bson:"phone"`
+	Password  string    `bson:"password"`
+	CreatedAt time.Time `bson:"created_at"`
 }
 
 type UserStore struct {
-	users    map[string]*User // username -> User
-	filepath string
+	collection *mongo.Collection
 }
 
-func NewUserStore(filepath string) (*UserStore, error) {
-	store := &UserStore{
-		users:    make(map[string]*User),
-		filepath: filepath,
-	}
-	err := store.load()
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
-	return store, nil
-}
+func NewUserStore(mongoURI, dbName string) (*UserStore, *mongo.Client, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-// load reads users from the JSON file
-func (s *UserStore) load() error {
-	data, err := os.ReadFile(s.filepath)
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	return json.Unmarshal(data, &s.users)
-}
 
-// save writes users to the JSON file
-func (s *UserStore) save() error {
-	data, err := json.MarshalIndent(s.users, "", "  ")
+	if err := client.Ping(ctx, nil); err != nil {
+		return nil, nil, err
+	}
+
+	collection := client.Database(dbName).Collection("users")
+
+	_, err = collection.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "username", Value: 1}},
+		Options: options.Index().SetUnique(true),
+	})
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	return os.WriteFile(s.filepath, data, 0644)
+
+	return &UserStore{collection: collection}, client, nil
 }
 
-// ValidateEmail checks if email format is valid
 func ValidateEmail(email string) bool {
-	re := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
-	return re.MatchString(email)
+	if len(email) > 254 || strings.Contains(email, " ") {
+		return false
+	}
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 || len(parts[0]) == 0 {
+		return false
+	}
+	domainParts := strings.Split(parts[1], ".")
+	if len(domainParts) < 2 {
+		return false
+	}
+	for _, p := range domainParts {
+		if len(p) == 0 {
+			return false
+		}
+	}
+	return true
 }
 
-// ValidatePhone checks if phone is valid (digits only, 7-15 chars)
 func ValidatePhone(phone string) bool {
 	if len(phone) < 7 || len(phone) > 15 {
 		return false
@@ -72,7 +84,6 @@ func ValidatePhone(phone string) bool {
 	return true
 }
 
-// ValidateUsername checks username rules
 func ValidateUsername(username string) error {
 	if len(username) < 3 {
 		return errors.New("username must be at least 3 characters")
@@ -86,19 +97,11 @@ func ValidateUsername(username string) error {
 	return nil
 }
 
-// Register creates a new user
 func (s *UserStore) Register(username, contact, password string) error {
-	// Validate username
 	if err := ValidateUsername(username); err != nil {
 		return err
 	}
 
-	// Check if username already taken
-	if _, exists := s.users[strings.ToLower(username)]; exists {
-		return errors.New("username already taken")
-	}
-
-	// Validate contact (email or phone)
 	isEmail := strings.Contains(contact, "@")
 	if isEmail {
 		if !ValidateEmail(contact) {
@@ -110,18 +113,15 @@ func (s *UserStore) Register(username, contact, password string) error {
 		}
 	}
 
-	// Validate password
 	if len(password) < 6 {
 		return errors.New("password must be at least 6 characters")
 	}
 
-	// Hash password
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 
-	// Determine email or phone
 	email, phone := "", ""
 	if isEmail {
 		email = contact
@@ -129,28 +129,101 @@ func (s *UserStore) Register(username, contact, password string) error {
 		phone = contact
 	}
 
-	// Save user
-	s.users[strings.ToLower(username)] = &User{
-		Username: username,
-		Email:    email,
-		Phone:    phone,
-		Password: string(hashed),
+	user := User{
+		Username:  username,
+		Email:     email,
+		Phone:     phone,
+		Password:  string(hashed),
+		CreatedAt: time.Now(),
 	}
 
-	return s.save()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err = s.collection.InsertOne(ctx, user)
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return errors.New("username already taken")
+		}
+		return err
+	}
+
+	return nil
 }
 
-// Login checks credentials and returns the user
 func (s *UserStore) Login(username, password string) (*User, error) {
-	user, exists := s.users[strings.ToLower(username)]
-	if !exists {
-		return nil, errors.New("user not found")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var user User
+	err := s.collection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, errors.New("user not found")
+		}
+		return nil, err
 	}
 
-	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
 		return nil, errors.New("wrong password")
 	}
 
-	return user, nil
+	return &user, nil
+}
+
+type ChatMessage struct {
+	Room      string    `bson:"room"` // "public" or "private:user1:user2"
+	Sender    string    `bson:"sender"`
+	Content   string    `bson:"content"`
+	Timestamp time.Time `bson:"timestamp"`
+}
+
+type HistoryStore struct {
+	collection *mongo.Collection
+}
+
+func NewHistoryStore(client *mongo.Client, dbName string) *HistoryStore {
+	collection := client.Database(dbName).Collection("messages")
+	return &HistoryStore{collection: collection}
+}
+
+func (h *HistoryStore) Save(room, sender, content string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := h.collection.InsertOne(ctx, ChatMessage{
+		Room:      room,
+		Sender:    sender,
+		Content:   content,
+		Timestamp: time.Now(),
+	})
+	return err
+}
+
+func (h *HistoryStore) GetLast(room string, limit int) ([]ChatMessage, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	opts := options.Find().
+		SetSort(bson.D{{Key: "timestamp", Value: -1}}).
+		SetLimit(int64(limit))
+
+	cursor, err := h.collection.Find(ctx, bson.M{"room": room}, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var messages []ChatMessage
+	if err := cursor.All(ctx, &messages); err != nil {
+		return nil, err
+	}
+
+	// Reverse so oldest is first
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+
+	return messages, nil
 }

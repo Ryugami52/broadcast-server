@@ -206,9 +206,11 @@ var connectCmd = &cobra.Command{
 				}
 
 				// Auth failure
+				// Auth failure
 				if strings.HasPrefix(text, "AUTH_FAIL:") {
 					fmt.Println("\n❌", text[10:])
 					fmt.Println("Please restart and try again.")
+					authOK <- "error:" // unblock the main goroutine
 					conn.Close()
 					return
 				}
@@ -245,6 +247,26 @@ var connectCmd = &cobra.Command{
 					continue
 				}
 
+				if strings.HasPrefix(text, "PRIVATE_HISTORY:") {
+					parts := strings.SplitN(text, ":", 4)
+					if len(parts) == 4 {
+						sender := parts[1]
+						timestamp := parts[2]
+						content := parts[3]
+						var line string
+						if sender == username {
+							line = fmt.Sprintf(">> [%s] [You]: %s", timestamp, content)
+						} else {
+							line = fmt.Sprintf(">> [%s] [%s]: %s", timestamp, sender, content)
+						}
+						privateHistory[privateTarget] = append(privateHistory[privateTarget], line)
+						if mode == "private" {
+							fmt.Println(line)
+						}
+					}
+					continue
+				}
+
 				// System message
 				if strings.HasPrefix(text, "SYSTEM:") {
 					fmt.Println("**", text[7:], "**")
@@ -266,6 +288,10 @@ var connectCmd = &cobra.Command{
 		payload := <-authOK
 		parts := strings.SplitN(payload, ":", 2)
 		if len(parts) == 2 {
+			if parts[0] == "error" {
+				<-done // wait for goroutine to finish
+				return
+			}
 			username = parts[0]
 			printPublicHistory()
 			fmt.Println("✅", parts[1])
@@ -286,6 +312,8 @@ var connectCmd = &cobra.Command{
 				}
 				mode = "private"
 				privateTarget = target
+				// Request private history from server
+				conn.WriteMessage(websocket.TextMessage, []byte("HISTORY:"+target))
 				printPrivateHistory(target)
 				continue
 			}

@@ -24,30 +24,34 @@ type Client struct {
 }
 
 type Server struct {
-	clients    map[*Client]bool
-	userMap    map[string]*Client
-	broadcast  chan []byte
-	register   chan *Client
-	unregister chan *Client
-	mu         sync.Mutex
-	history    [][]byte
-	userStore  *UserStore
+	clients      map[*Client]bool
+	userMap      map[string]*Client
+	broadcast    chan []byte
+	register     chan *Client
+	unregister   chan *Client
+	mu           sync.Mutex
+	history      [][]byte
+	userStore    *UserStore
+	historyStore *HistoryStore
 }
 
-func NewServer() *Server {
-	store, err := NewUserStore("users.json")
+func NewServer(mongoURI, dbName string) *Server {
+	store, client, err := NewUserStore(mongoURI, dbName)
 	if err != nil {
-		log.Fatal("Failed to load user store:", err)
+		log.Fatal("Failed to connect to MongoDB:", err)
 	}
 
+	historyStore := NewHistoryStore(client, dbName)
+
 	return &Server{
-		clients:    make(map[*Client]bool),
-		userMap:    make(map[string]*Client),
-		broadcast:  make(chan []byte),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		history:    make([][]byte, 0, 10),
-		userStore:  store,
+		clients:      make(map[*Client]bool),
+		userMap:      make(map[string]*Client),
+		broadcast:    make(chan []byte),
+		register:     make(chan *Client),
+		unregister:   make(chan *Client),
+		history:      make([][]byte, 0, 10),
+		userStore:    store,
+		historyStore: historyStore,
 	}
 }
 
@@ -59,16 +63,18 @@ func (s *Server) Run() {
 			s.clients[client] = true
 			s.mu.Unlock()
 
-			if len(s.history) > 0 {
+			// Load public history from MongoDB
+			messages, err := s.historyStore.GetLast("public", 10)
+			if err == nil && len(messages) > 0 {
 				client.send <- []byte("--- Last messages ---")
-				for _, msg := range s.history {
-					client.send <- msg
+				for _, msg := range messages {
+					line := fmt.Sprintf("[%s] %s", msg.Timestamp.Format("15:04:05"), msg.Content)
+					client.send <- []byte(line)
 				}
 				client.send <- []byte("--- End of history ---")
 			}
 
 			fmt.Println("New client connected. Total:", len(s.clients))
-
 		case client := <-s.unregister:
 			s.mu.Lock()
 			if _, ok := s.clients[client]; ok {
@@ -210,15 +216,39 @@ func (c *Client) readPump(s *Server) {
 				s.mu.Unlock()
 
 				if ok {
+					// Save to history
+					room := "private:" + c.username + ":" + targetUsername
+					go s.historyStore.Save(room, c.username, privateMsg)
+
 					target.send <- []byte("PRIVATE_FROM:" + c.username + ":" + privateMsg)
 					c.send <- []byte("PRIVATE_TO:" + targetUsername + ":" + privateMsg)
-				} else {
-					c.send <- []byte("SYSTEM:User " + targetUsername + " not found or offline.")
+				}
+
+			}
+			continue
+		}
+		if strings.HasPrefix(text, "HISTORY:") {
+			targetUsername := text[8:]
+			room := "private:" + c.username + ":" + targetUsername
+			// Also check reverse order
+			messages, err := s.historyStore.GetLast(room, 20)
+			if err == nil && len(messages) == 0 {
+				room = "private:" + targetUsername + ":" + c.username
+				messages, _ = s.historyStore.GetLast(room, 20)
+			}
+			if len(messages) > 0 {
+				for _, msg := range messages {
+					line := fmt.Sprintf("PRIVATE_HISTORY:%s:%s:%s",
+						msg.Sender,
+						msg.Timestamp.Format("15:04:05"),
+						msg.Content)
+					c.send <- []byte(line)
 				}
 			}
 			continue
 		}
 
+		go s.historyStore.Save("public", c.username, text)
 		s.broadcast <- message
 	}
 }
