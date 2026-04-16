@@ -17,22 +17,29 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	conn     *websocket.Conn
-	send     chan []byte
-	username string
+	conn          *websocket.Conn
+	send          chan []byte
+	username      string
+	authenticated bool
 }
 
 type Server struct {
 	clients    map[*Client]bool
-	userMap    map[string]*Client // username -> client
+	userMap    map[string]*Client
 	broadcast  chan []byte
 	register   chan *Client
 	unregister chan *Client
 	mu         sync.Mutex
 	history    [][]byte
+	userStore  *UserStore
 }
 
 func NewServer() *Server {
+	store, err := NewUserStore("users.json")
+	if err != nil {
+		log.Fatal("Failed to load user store:", err)
+	}
+
 	return &Server{
 		clients:    make(map[*Client]bool),
 		userMap:    make(map[string]*Client),
@@ -40,6 +47,7 @@ func NewServer() *Server {
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		history:    make([][]byte, 0, 10),
+		userStore:  store,
 	}
 }
 
@@ -123,6 +131,59 @@ func (c *Client) readPump(s *Server) {
 		}
 
 		text := string(message)
+
+		// Handle REGISTER:username:contact:password
+		if strings.HasPrefix(text, "REGISTER:") {
+			parts := strings.SplitN(text, ":", 4)
+			if len(parts) != 4 {
+				c.send <- []byte("SYSTEM:Invalid registration format.")
+				continue
+			}
+			username, contact, password := parts[1], parts[2], parts[3]
+			err := s.userStore.Register(username, contact, password)
+			if err != nil {
+				c.send <- []byte("SYSTEM:Registration failed: " + err.Error())
+				continue
+			}
+			c.username = username
+			c.authenticated = true
+			s.mu.Lock()
+			s.userMap[username] = c
+			s.mu.Unlock()
+			c.send <- []byte("AUTH_OK:" + username + ":Welcome! You are now registered and connected.")
+			s.broadcast <- []byte(username + " has joined the chat!")
+			continue
+		}
+
+		// Handle LOGIN:username:password
+		if strings.HasPrefix(text, "LOGIN:") {
+			parts := strings.SplitN(text, ":", 3)
+			if len(parts) != 3 {
+				c.send <- []byte("SYSTEM:Invalid login format.")
+				continue
+			}
+			username, password := parts[1], parts[2]
+			user, err := s.userStore.Login(username, password)
+			if err != nil {
+				c.send <- []byte("AUTH_FAIL:" + err.Error())
+				continue
+			}
+			c.username = user.Username
+			c.authenticated = true
+			s.mu.Lock()
+			s.userMap[user.Username] = c
+			s.mu.Unlock()
+			c.send <- []byte("AUTH_OK:" + user.Username + ":Welcome back " + user.Username + "!")
+			s.broadcast <- []byte(user.Username + " has joined the chat!")
+			continue
+		}
+
+		// Block unauthenticated clients
+		if !c.authenticated {
+			c.send <- []byte("SYSTEM:You must register or login first.")
+			continue
+		}
+
 		// Handle LIST
 		if text == "LIST:" {
 			s.mu.Lock()
@@ -134,15 +195,6 @@ func (c *Client) readPump(s *Server) {
 			}
 			s.mu.Unlock()
 			c.send <- []byte("SYSTEM:Online users: " + strings.Join(users, ", "))
-			continue
-		}
-		// Handle JOIN
-		if strings.HasPrefix(text, "JOIN:") {
-			c.username = text[5:]
-			s.mu.Lock()
-			s.userMap[c.username] = c
-			s.mu.Unlock()
-			s.broadcast <- []byte(c.username + " has joined the chat!")
 			continue
 		}
 
@@ -158,12 +210,9 @@ func (c *Client) readPump(s *Server) {
 				s.mu.Unlock()
 
 				if ok {
-					// Send to target
 					target.send <- []byte("PRIVATE_FROM:" + c.username + ":" + privateMsg)
-					// Send back to sender as confirmation
 					c.send <- []byte("PRIVATE_TO:" + targetUsername + ":" + privateMsg)
 				} else {
-					// User not found
 					c.send <- []byte("SYSTEM:User " + targetUsername + " not found or offline.")
 				}
 			}

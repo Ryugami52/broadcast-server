@@ -1,0 +1,20 @@
+{
+  "test1": {
+    "username": "test1",
+    "email": "",
+    "phone": "111111111",
+    "password": "$2a$10$ZH11jzLMpu1eGWP4KrvnAeGcVPEySROZKEu6aNMy5G6X2Irvl0Xl2"
+  },
+  "test2": {
+    "username": "test2",
+    "email": "",
+    "phone": "222222222",
+    "password": "$2a$10$4k5OtWQmSBpxI8XXsuzuh.3xq6S1F00NXwGiwj2z68sI6O2a1p5wC"
+  },
+  "test3": {
+    "username": "test3",
+    "email": "",
+    "phone": "333333333",
+    "password": "$2a$10$dV31shTE8h/MsBuoazZrbuyzWrrsFTN9FpnmfCJ1cIhWZv0sxGL6q"
+  }
+}
