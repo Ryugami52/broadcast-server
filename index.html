@@ -1,10 +1,8 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>BROADCAST // TERMINAL</title>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">
 <style>
@@ -34,6 +32,7 @@
     font-family: 'Share Tech Mono', monospace;
     font-size: 14px;
     overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
   }
 
   body::before {
@@ -45,6 +44,7 @@
     z-index: 9999;
   }
 
+  /* BOOT */
   #boot-screen {
     position: fixed;
     inset: 0;
@@ -57,22 +57,14 @@
     font-family: 'VT323', monospace;
     font-size: 20px;
   }
-
-  #boot-text {
-    color: var(--green);
-    width: 500px;
-    max-width: 90vw;
-  }
-
+  #boot-text { color: var(--green); width: 500px; max-width: 90vw; }
   #boot-text .line { opacity: 0; animation: fadeIn 0.1s forwards; }
   @keyframes fadeIn { to { opacity: 1; } }
 
-  #app {
-    display: none;
-    height: 100vh;
-    flex-direction: column;
-  }
+  /* APP SHELL */
+  #app { display: none; height: 100vh; height: 100dvh; flex-direction: column; }
 
+  /* TOPBAR */
   #topbar {
     display: flex;
     align-items: center;
@@ -81,42 +73,43 @@
     border-bottom: 1px solid var(--border);
     background: var(--bg2);
     flex-shrink: 0;
+    min-height: 44px;
   }
-
-  #topbar .logo {
-    font-family: 'VT323', monospace;
-    font-size: 22px;
-    color: var(--green);
-    letter-spacing: 3px;
-  }
-
-  #topbar .status {
-    font-size: 12px;
-    color: var(--text-dim);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--green);
-    animation: blink 1.5s infinite;
-  }
-
+  #topbar .left { display: flex; align-items: center; gap: 8px; }
+  #topbar .logo { font-family: 'VT323', monospace; font-size: 22px; color: var(--green); letter-spacing: 3px; }
+  #topbar .status { font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+  #topbar .user-info { font-size: 12px; color: var(--text-dim); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: blink 1.5s infinite; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
-  #topbar .user-info {
-    font-size: 12px;
+  #menu-btn {
+    display: none;
+    background: transparent;
+    border: none;
     color: var(--text-dim);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 6px;
+    line-height: 1;
+    min-width: 36px;
+    min-height: 36px;
+    align-items: center;
+    justify-content: center;
   }
+  #menu-btn:hover { color: var(--green); }
 
-  #main {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
+  /* MAIN AREA */
+  #main { display: flex; flex: 1; overflow: hidden; }
+
+  /* SIDEBAR */
+  #sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 50;
   }
+  #sidebar-overlay.open { display: block; }
 
   #sidebar {
     width: 200px;
@@ -125,23 +118,12 @@
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
+    overflow-y: auto;
   }
-
-  .sidebar-section {
-    padding: 8px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .sidebar-label {
-    font-size: 11px;
-    color: var(--text-muted);
-    letter-spacing: 2px;
-    margin-bottom: 6px;
-    padding: 4px 4px;
-  }
-
+  .sidebar-section { padding: 8px; border-bottom: 1px solid var(--border); }
+  .sidebar-label { font-size: 11px; color: var(--text-muted); letter-spacing: 2px; margin-bottom: 6px; padding: 4px; }
   .sidebar-item {
-    padding: 6px 8px;
+    padding: 8px 8px;
     cursor: pointer;
     border-radius: 2px;
     font-size: 13px;
@@ -150,39 +132,27 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    min-height: 36px;
   }
-
   .sidebar-item:hover { background: var(--green-dark); color: var(--green); }
   .sidebar-item.active { background: var(--green-dark); color: var(--green); border-left: 2px solid var(--green); }
-
   .sidebar-item .prefix { color: var(--text-muted); font-size: 11px; }
-
-  #online-list {
-    padding: 8px;
-    flex: 1;
-    overflow-y: auto;
-  }
-
+  #online-list { padding: 8px; flex: 1; overflow-y: auto; }
   .online-user {
-    padding: 4px 8px;
+    padding: 6px 8px;
     font-size: 12px;
     color: var(--text-dim);
     display: flex;
     align-items: center;
     gap: 6px;
     cursor: pointer;
+    min-height: 32px;
   }
-
   .online-user:hover { color: var(--cyan); }
   .online-user .dot-sm { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
 
-  #chat-area {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
+  /* CHAT AREA */
+  #chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
   #chat-header {
     padding: 8px 16px;
     border-bottom: 1px solid var(--border);
@@ -193,8 +163,8 @@
     align-items: center;
     justify-content: space-between;
     flex-shrink: 0;
+    min-height: 40px;
   }
-
   #chat-header .channel { color: var(--green); font-size: 14px; }
 
   #messages {
@@ -204,54 +174,43 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    overscroll-behavior: contain;
   }
-
   #messages::-webkit-scrollbar { width: 4px; }
   #messages::-webkit-scrollbar-track { background: var(--bg); }
   #messages::-webkit-scrollbar-thumb { background: var(--border); }
 
   .msg {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: baseline;
     animation: msgIn 0.15s ease-out;
-    line-height: 1.5;
+    line-height: 1.6;
+    flex-wrap: wrap;
   }
-
   @keyframes msgIn { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: translateX(0); } }
-
   .msg .ts { color: var(--text-muted); font-size: 11px; flex-shrink: 0; }
   .msg .sender { color: var(--green-mid); flex-shrink: 0; }
   .msg .sender.me { color: var(--cyan); }
   .msg .sender.system { color: var(--amber); }
-  .msg .body { color: var(--text); word-break: break-word; }
+  .msg .body { color: var(--text); word-break: break-word; min-width: 0; flex: 1; }
   .msg .body.system { color: var(--amber); font-style: italic; }
   .msg .body.join { color: var(--green-dim); font-style: italic; }
   .msg .body.leave { color: var(--red); font-style: italic; }
   .msg .body.private { color: var(--cyan); }
-  .msg .body.history { color: var(--text-dim); }
+  .msg-divider { text-align: center; color: var(--text-muted); font-size: 11px; padding: 8px 0; border-top: 1px solid var(--border); margin: 4px 0; }
 
-  .msg-divider {
-    text-align: center;
-    color: var(--text-muted);
-    font-size: 11px;
-    padding: 8px 0;
-    border-top: 1px solid var(--border);
-    margin: 4px 0;
-  }
-
+  /* INPUT */
   #input-area {
-    padding: 12px 16px;
+    padding: 10px 12px;
     border-top: 1px solid var(--border);
     background: var(--bg2);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-shrink: 0;
   }
-
-  #input-prompt { color: var(--green); font-size: 16px; }
-
+  #input-prompt { color: var(--green); font-size: 16px; flex-shrink: 0; }
   #msg-input {
     flex: 1;
     background: transparent;
@@ -261,23 +220,95 @@
     font-family: 'Share Tech Mono', monospace;
     font-size: 14px;
     caret-color: var(--green);
+    min-width: 0;
   }
-
   #msg-input::placeholder { color: var(--text-muted); }
-
   #send-btn {
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-dim);
     font-family: 'Share Tech Mono', monospace;
     font-size: 12px;
-    padding: 4px 10px;
+    padding: 6px 12px;
     cursor: pointer;
     transition: all 0.1s;
+    flex-shrink: 0;
+    min-height: 36px;
   }
-
   #send-btn:hover { border-color: var(--green); color: var(--green); }
 
+  /* BOTTOM NAV (mobile only) */
+  #bottom-nav {
+    display: none;
+    border-top: 1px solid var(--border);
+    background: var(--bg2);
+    flex-shrink: 0;
+  }
+  .bnav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 4px 8px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: 1px;
+    border-top: 2px solid transparent;
+    transition: all 0.1s;
+    gap: 3px;
+    position: relative;
+    min-height: 52px;
+  }
+  .bnav-item.active { color: var(--green); border-top-color: var(--green); }
+  .bnav-icon { font-size: 17px; line-height: 1; }
+  .bnav-badge {
+    position: absolute;
+    top: 6px;
+    right: calc(50% - 20px);
+    background: var(--red);
+    color: #fff;
+    font-size: 9px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .bnav-badge.show { display: flex; }
+
+  /* MOBILE SLIDE PANEL */
+  #mobile-panel {
+    display: none;
+    position: fixed;
+    bottom: 52px;
+    left: 0;
+    right: 0;
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    z-index: 40;
+    max-height: 55vh;
+    overflow-y: auto;
+    padding: 12px;
+    animation: slideUp 0.2s ease-out;
+  }
+  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  #mobile-panel .panel-item {
+    padding: 10px 8px;
+    font-size: 13px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+  #mobile-panel .panel-item:hover { color: var(--green); }
+  #mobile-panel .panel-label { font-size: 11px; color: var(--text-muted); letter-spacing: 2px; margin-bottom: 8px; }
+
+  /* AUTH SCREEN */
   #auth-screen {
     position: fixed;
     inset: 0;
@@ -286,31 +317,24 @@
     align-items: center;
     justify-content: center;
     z-index: 500;
+    padding: 16px;
+    overflow-y: auto;
   }
-
   #auth-box {
     width: 480px;
-    max-width: 90vw;
+    max-width: 100%;
     border: 1px solid var(--border);
     background: var(--bg2);
-    padding: 32px;
+    padding: 28px 24px;
   }
-
   #auth-box h2 {
     font-family: 'VT323', monospace;
-    font-size: 28px;
+    font-size: 26px;
     color: var(--green);
-    margin-bottom: 24px;
+    margin-bottom: 20px;
     letter-spacing: 2px;
   }
-
-  .auth-tabs {
-    display: flex;
-    gap: 0;
-    margin-bottom: 24px;
-    border-bottom: 1px solid var(--border);
-  }
-
+  .auth-tabs { display: flex; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
   .auth-tab {
     padding: 8px 20px;
     cursor: pointer;
@@ -319,42 +343,29 @@
     border-bottom: 2px solid transparent;
     margin-bottom: -1px;
     transition: all 0.1s;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
   }
-
   .auth-tab.active { color: var(--green); border-bottom-color: var(--green); }
-
-  .form-group { margin-bottom: 16px; }
-
-  .form-label {
-    display: block;
-    font-size: 11px;
-    color: var(--text-dim);
-    letter-spacing: 1px;
-    margin-bottom: 6px;
-  }
-
+  .form-group { margin-bottom: 14px; }
+  .form-label { display: block; font-size: 11px; color: var(--text-dim); letter-spacing: 1px; margin-bottom: 6px; }
   .form-input {
     width: 100%;
     background: var(--bg3);
     border: 1px solid var(--border);
     color: var(--text);
     font-family: 'Share Tech Mono', monospace;
-    font-size: 14px;
-    padding: 8px 12px;
+    font-size: 16px;
+    padding: 10px 12px;
     outline: none;
     transition: border-color 0.1s;
+    -webkit-appearance: none;
+    border-radius: 0;
   }
-
   .form-input:focus { border-color: var(--green); }
   .form-input::placeholder { color: var(--text-muted); }
-
-  .form-error {
-    font-size: 12px;
-    color: var(--red);
-    margin-top: 4px;
-    display: none;
-  }
-
+  .form-error { font-size: 12px; color: var(--red); margin-top: 4px; display: none; }
   .auth-btn {
     width: 100%;
     background: var(--green-dark);
@@ -362,23 +373,15 @@
     color: var(--green);
     font-family: 'Share Tech Mono', monospace;
     font-size: 14px;
-    padding: 10px;
+    padding: 12px;
     cursor: pointer;
     letter-spacing: 2px;
     transition: all 0.1s;
     margin-top: 8px;
+    min-height: 44px;
   }
-
   .auth-btn:hover { background: var(--green); color: var(--bg); }
-
-  #auth-error {
-    color: var(--red);
-    font-size: 12px;
-    margin-top: 12px;
-    display: none;
-    padding: 8px;
-    border: 1px solid var(--red);
-  }
+  #auth-error { color: var(--red); font-size: 12px; margin-top: 12px; display: none; padding: 8px; border: 1px solid var(--red); }
 
   #private-back {
     background: transparent;
@@ -387,7 +390,8 @@
     font-family: 'Share Tech Mono', monospace;
     font-size: 12px;
     cursor: pointer;
-    padding: 0;
+    padding: 4px 8px;
+    min-height: 32px;
   }
   #private-back:hover { color: var(--green); }
 
@@ -395,17 +399,55 @@
     position: fixed;
     bottom: 70px;
     right: 16px;
+    left: auto;
     background: var(--bg2);
     border: 1px solid var(--cyan);
     color: var(--cyan);
     font-size: 12px;
     padding: 8px 14px;
     animation: notifIn 0.2s ease-out, notifOut 0.3s ease-in 3s forwards;
-    z-index: 100;
+    z-index: 200;
+    max-width: 280px;
   }
-
   @keyframes notifIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes notifOut { to { opacity: 0; transform: translateY(10px); } }
+
+  /* MOBILE BREAKPOINT */
+  @media (max-width: 640px) {
+    #menu-btn { display: flex; }
+
+    #sidebar {
+      position: fixed;
+      left: -220px;
+      top: 0;
+      bottom: 0;
+      z-index: 60;
+      transition: left 0.25s ease;
+      width: 220px;
+    }
+    #sidebar.open { left: 0; }
+
+    #bottom-nav { display: flex; }
+
+    #topbar .status { display: none; }
+
+    .msg .ts { display: none; }
+
+    #msg-input { font-size: 16px; }
+
+    .notification {
+      bottom: 80px;
+      right: 8px;
+      left: 8px;
+      max-width: none;
+    }
+
+    #mobile-panel { display: none; }
+    #mobile-panel.open { display: block; }
+
+    #messages { padding: 8px 10px; }
+    #input-area { padding: 8px 10px; }
+  }
 </style>
 </head>
 <body>
@@ -425,7 +467,7 @@
     <div id="login-form">
       <div class="form-group">
         <label class="form-label">USERNAME</label>
-        <input class="form-input" id="login-username" type="text" placeholder="enter username" autocomplete="off">
+        <input class="form-input" id="login-username" type="text" placeholder="enter username" autocomplete="off" autocorrect="off" autocapitalize="none">
       </div>
       <div class="form-group">
         <label class="form-label">PASSWORD</label>
@@ -437,12 +479,12 @@
     <div id="register-form" style="display:none;">
       <div class="form-group">
         <label class="form-label">USERNAME (3-20 chars, no spaces)</label>
-        <input class="form-input" id="reg-username" type="text" placeholder="choose username" autocomplete="off">
+        <input class="form-input" id="reg-username" type="text" placeholder="choose username" autocomplete="off" autocorrect="off" autocapitalize="none">
         <div class="form-error" id="err-username"></div>
       </div>
       <div class="form-group">
         <label class="form-label">EMAIL OR PHONE</label>
-        <input class="form-input" id="reg-contact" type="text" placeholder="user@example.com or 1234567890">
+        <input class="form-input" id="reg-contact" type="text" placeholder="user@example.com or 1234567890" autocorrect="off" autocapitalize="none">
         <div class="form-error" id="err-contact"></div>
       </div>
       <div class="form-group">
@@ -459,7 +501,10 @@
 
 <div id="app">
   <div id="topbar">
-    <div class="logo">BROADCAST//</div>
+    <div class="left">
+      <button id="menu-btn" onclick="toggleSidebar()">&#9776;</button>
+      <div class="logo">BROADCAST//</div>
+    </div>
     <div class="status">
       <div class="dot"></div>
       <span id="status-text">CONNECTED</span>
@@ -468,10 +513,12 @@
   </div>
 
   <div id="main">
+    <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
     <div id="sidebar">
       <div class="sidebar-section">
         <div class="sidebar-label">CHANNELS</div>
-        <div class="sidebar-item active" id="tab-public" onclick="switchToPublic()">
+        <div class="sidebar-item active" id="tab-public" onclick="switchToPublic(); closeSidebar()">
           <span class="prefix">#</span> public
         </div>
       </div>
@@ -488,15 +535,35 @@
     <div id="chat-area">
       <div id="chat-header">
         <span class="channel" id="chat-title"># public</span>
-        <button id="private-back" style="display:none;" onclick="switchToPublic()">[ back to public ]</button>
+        <button id="private-back" style="display:none;" onclick="switchToPublic()">[ back ]</button>
       </div>
       <div id="messages"></div>
       <div id="input-area">
         <span id="input-prompt">&gt;</span>
-        <input id="msg-input" type="text" placeholder="type message... (/list to see online users)" autocomplete="off">
+        <input id="msg-input" type="text" placeholder="type a message..." autocomplete="off" autocorrect="off" autocapitalize="none">
         <button id="send-btn" onclick="sendMessage()">SEND</button>
       </div>
     </div>
+  </div>
+
+  <div id="bottom-nav">
+    <div class="bnav-item active" id="bnav-public" onclick="switchToPublic(); setActiveNav('public'); closeMobilePanel()">
+      <span class="bnav-icon">#</span>
+      <span>PUBLIC</span>
+    </div>
+    <div class="bnav-item" id="bnav-dms" onclick="toggleMobilePanel('dms'); setActiveNav('dms')">
+      <span class="bnav-icon">@</span>
+      <span>DMS</span>
+      <div class="bnav-badge" id="dm-badge"></div>
+    </div>
+    <div class="bnav-item" id="bnav-online" onclick="toggleMobilePanel('online'); setActiveNav('online')">
+      <span class="bnav-icon">*</span>
+      <span>ONLINE</span>
+    </div>
+  </div>
+
+  <div id="mobile-panel">
+    <div id="mobile-panel-content"></div>
   </div>
 </div>
 
@@ -511,6 +578,8 @@ let publicHistory = [];
 let privateHistories = {};
 let onlineUsers = new Set();
 let authOKResolver = null;
+let dmUnread = 0;
+let activeMobilePanel = null;
 
 function boot() {
   const lines = [
@@ -535,7 +604,6 @@ function boot() {
     const div = document.createElement('div');
     div.className = 'line';
     div.textContent = lines[i];
-    div.style.animationDelay = '0s';
     el.appendChild(div);
     i++;
     setTimeout(nextLine, i === lines.length ? 600 : 180);
@@ -555,6 +623,7 @@ function connectWS() {
   ws.onclose = () => {
     document.getElementById('status-text').textContent = 'DISCONNECTED';
     document.querySelector('.dot').style.background = 'var(--red)';
+    document.querySelector('.dot').style.animation = 'none';
   };
 }
 
@@ -563,17 +632,15 @@ function handleMessage(data) {
 
   if (data.startsWith('AUTH_OK:')) {
     const parts = data.split(':');
-    if (parts.length >= 3) {
-      const uname = parts[1];
-      const msg = parts.slice(2).join(':');
-      if (authOKResolver) authOKResolver({ username: uname, msg });
+    if (parts.length >= 3 && authOKResolver) {
+      authOKResolver({ username: parts[1], msg: parts.slice(2).join(':') });
     }
     return;
   }
 
   if (data.startsWith('AUTH_FAIL:')) {
-    const reason = data.slice(10);
-    showAuthError(reason);
+    showAuthError(data.slice(10));
+    if (authOKResolver) authOKResolver(null);
     return;
   }
 
@@ -581,9 +648,10 @@ function handleMessage(data) {
     const text = data.slice(7);
     if (text.startsWith('Online users:')) {
       const users = text.slice(14).split(', ').filter(Boolean);
-      updateOnlineList(users);
+      users.forEach(u => onlineUsers.add(u));
+      renderOnlineUsers();
     }
-    appendMsg({ ts: t, sender: 'SYS', body: text, type: 'system' }, mode === 'public' ? 'public' : null);
+    appendMsg({ ts: t, sender: 'SYS', body: text, type: 'system' }, 'public');
     return;
   }
 
@@ -599,7 +667,11 @@ function handleMessage(data) {
       if (mode === 'private' && privateTarget === from) {
         appendMsg(line, 'private');
       } else {
-        showNotification(`[PM from ${from}]: ${msg}`);
+        showNotification('[PM from ' + from + ']: ' + msg);
+        dmUnread++;
+        const badge = document.getElementById('dm-badge');
+        badge.textContent = dmUnread;
+        badge.classList.add('show');
       }
     }
     return;
@@ -613,9 +685,7 @@ function handleMessage(data) {
       const line = { ts: t, sender: username + ' (you)', body: msg, type: 'me' };
       if (!privateHistories[to]) privateHistories[to] = [];
       privateHistories[to].push(line);
-      if (mode === 'private' && privateTarget === to) {
-        appendMsg(line, 'private');
-      }
+      if (mode === 'private' && privateTarget === to) appendMsg(line, 'private');
     }
     return;
   }
@@ -635,31 +705,15 @@ function handleMessage(data) {
     return;
   }
 
-  if (data === '--- Last messages ---') {
-    appendDivider('── history ──');
-    return;
-  }
-  if (data === '--- End of history ---') {
-    appendDivider('── live ──');
-    return;
-  }
+  if (data === '--- Last messages ---') { appendDivider('── history ──'); return; }
+  if (data === '--- End of history ---') { appendDivider('── live ──'); return; }
 
   const isJoin = data.includes('has joined the chat');
   const isLeave = data.includes('has left the chat');
   const type = isJoin ? 'join' : isLeave ? 'leave' : 'public';
 
-  if (isJoin) {
-    const user = data.split(' ')[0];
-    if (user !== username) {
-      onlineUsers.add(user);
-      renderOnlineUsers();
-    }
-  }
-  if (isLeave) {
-    const user = data.split(' ')[0];
-    onlineUsers.delete(user);
-    renderOnlineUsers();
-  }
+  if (isJoin) { const u = data.split(' ')[0]; if (u !== username) { onlineUsers.add(u); renderOnlineUsers(); } }
+  if (isLeave) { const u = data.split(' ')[0]; onlineUsers.delete(u); renderOnlineUsers(); }
 
   const line = { ts: t, sender: '', body: data, type };
   publicHistory.push(line);
@@ -675,14 +729,12 @@ function appendMsg(msg, target) {
   ts.className = 'ts';
   ts.textContent = msg.ts;
   div.appendChild(ts);
-
   if (msg.sender) {
     const sender = document.createElement('span');
     sender.className = 'sender ' + (msg.type === 'me' ? 'me' : msg.type === 'system' ? 'system' : '');
     sender.textContent = '[' + msg.sender + ']';
     div.appendChild(sender);
   }
-
   const body = document.createElement('span');
   body.className = 'body ' + msg.type;
   body.textContent = msg.body;
@@ -700,19 +752,14 @@ function appendDivider(text) {
   el.scrollTop = el.scrollHeight;
 }
 
-function updateOnlineList(users) {
-  users.forEach(u => onlineUsers.add(u));
-  renderOnlineUsers();
-}
-
 function renderOnlineUsers() {
   const el = document.getElementById('online-users');
   el.innerHTML = '';
   onlineUsers.forEach(u => {
     const div = document.createElement('div');
     div.className = 'online-user';
-    div.innerHTML = `<div class="dot-sm"></div>${u}`;
-    div.onclick = () => openPrivate(u);
+    div.innerHTML = '<div class="dot-sm"></div>' + u;
+    div.onclick = () => { openPrivate(u); closeSidebar(); };
     el.appendChild(div);
   });
 }
@@ -723,8 +770,8 @@ function addDMTab(user) {
   const div = document.createElement('div');
   div.className = 'sidebar-item';
   div.id = 'dm-' + user;
-  div.innerHTML = `<span class="prefix">@</span> ${user}`;
-  div.onclick = () => openPrivate(user);
+  div.innerHTML = '<span class="prefix">@</span> ' + user;
+  div.onclick = () => { openPrivate(user); closeSidebar(); };
   list.appendChild(div);
 }
 
@@ -734,20 +781,15 @@ function openPrivate(target) {
   document.getElementById('chat-title').textContent = '@ ' + target;
   document.getElementById('private-back').style.display = 'block';
   document.getElementById('tab-public').classList.remove('active');
-  if (document.getElementById('dm-' + target)) {
-    document.getElementById('dm-' + target).classList.add('active');
-  }
+  if (document.getElementById('dm-' + target)) document.getElementById('dm-' + target).classList.add('active');
   addDMTab(target);
-
   const el = document.getElementById('messages');
   el.innerHTML = '';
   appendDivider('── private chat with ' + target + ' ──');
-
-  if (privateHistories[target]) {
-    privateHistories[target].forEach(m => appendMsg(m, 'private'));
-  }
-
+  if (privateHistories[target]) privateHistories[target].forEach(m => appendMsg(m, 'private'));
   ws.send('HISTORY:' + target);
+  closeMobilePanel();
+  setActiveNav('dms');
 }
 
 function switchToPublic() {
@@ -757,12 +799,13 @@ function switchToPublic() {
   document.getElementById('private-back').style.display = 'none';
   document.getElementById('tab-public').classList.add('active');
   document.querySelectorAll('#dm-list .sidebar-item').forEach(el => el.classList.remove('active'));
-
   const el = document.getElementById('messages');
   el.innerHTML = '';
   appendDivider('── public chat ──');
   publicHistory.forEach(m => appendMsg(m, 'public'));
   el.scrollTop = el.scrollHeight;
+  closeMobilePanel();
+  setActiveNav('public');
 }
 
 function sendMessage() {
@@ -771,16 +814,8 @@ function sendMessage() {
   if (!text || !ws) return;
   input.value = '';
 
-  if (text === '/list') {
-    ws.send('LIST:');
-    return;
-  }
-
-  if (text.startsWith('/msg ')) {
-    const target = text.slice(5).trim();
-    if (target) openPrivate(target);
-    return;
-  }
+  if (text === '/list') { ws.send('LIST:'); return; }
+  if (text.startsWith('/msg ')) { const t = text.slice(5).trim(); if (t) openPrivate(t); return; }
 
   if (mode === 'private') {
     ws.send('PRIVATE:' + privateTarget + ':' + text);
@@ -791,6 +826,92 @@ function sendMessage() {
 
 document.getElementById('msg-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') sendMessage();
+});
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('open');
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+}
+
+function setActiveNav(tab) {
+  document.querySelectorAll('.bnav-item').forEach(el => el.classList.remove('active'));
+  const el = document.getElementById('bnav-' + tab);
+  if (el) el.classList.add('active');
+  if (tab === 'dms') {
+    dmUnread = 0;
+    const badge = document.getElementById('dm-badge');
+    badge.textContent = '';
+    badge.classList.remove('show');
+  }
+}
+
+function toggleMobilePanel(type) {
+  const panel = document.getElementById('mobile-panel');
+  const content = document.getElementById('mobile-panel-content');
+
+  if (activeMobilePanel === type && panel.classList.contains('open')) {
+    closeMobilePanel();
+    return;
+  }
+
+  activeMobilePanel = type;
+  content.innerHTML = '';
+
+  if (type === 'dms') {
+    const label = document.createElement('div');
+    label.className = 'panel-label';
+    label.textContent = 'DIRECT MESSAGES';
+    content.appendChild(label);
+
+    if (Object.keys(privateHistories).length === 0) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:var(--text-muted);font-size:12px;padding:8px;';
+      empty.textContent = 'No DMs yet. Tap a user in ONLINE to start.';
+      content.appendChild(empty);
+    }
+
+    Object.keys(privateHistories).forEach(user => {
+      const item = document.createElement('div');
+      item.className = 'panel-item';
+      item.innerHTML = '<span style="color:var(--text-muted)">@</span> ' + user;
+      item.onclick = () => openPrivate(user);
+      content.appendChild(item);
+    });
+  }
+
+  if (type === 'online') {
+    const label = document.createElement('div');
+    label.className = 'panel-label';
+    label.textContent = 'ONLINE USERS';
+    content.appendChild(label);
+    onlineUsers.forEach(u => {
+      const item = document.createElement('div');
+      item.className = 'panel-item';
+      item.innerHTML = '<div class="dot-sm" style="width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;"></div>' + u;
+      item.onclick = () => openPrivate(u);
+      content.appendChild(item);
+    });
+  }
+
+  panel.classList.add('open');
+}
+
+function closeMobilePanel() {
+  activeMobilePanel = null;
+  document.getElementById('mobile-panel').classList.remove('open');
+}
+
+document.addEventListener('click', e => {
+  const panel = document.getElementById('mobile-panel');
+  const bnav = document.getElementById('bottom-nav');
+  if (panel.classList.contains('open') && !panel.contains(e.target) && !bnav.contains(e.target)) {
+    closeMobilePanel();
+  }
 });
 
 function switchTab(tab) {
@@ -845,21 +966,16 @@ async function doRegister() {
   const u = document.getElementById('reg-username').value.trim();
   const c = document.getElementById('reg-contact').value.trim();
   const p = document.getElementById('reg-password').value;
-
-  let valid = true;
   const uErr = validateUsername(u);
   const cErr = validateContact(c);
   const pErr = p.length < 6 ? 'Must be at least 6 characters' : null;
-
   document.getElementById('err-username').textContent = uErr || '';
   document.getElementById('err-username').style.display = uErr ? 'block' : 'none';
   document.getElementById('err-contact').textContent = cErr || '';
   document.getElementById('err-contact').style.display = cErr ? 'block' : 'none';
   document.getElementById('err-password').textContent = pErr || '';
   document.getElementById('err-password').style.display = pErr ? 'block' : 'none';
-
   if (uErr || cErr || pErr) return;
-
   ws.send('REGISTER:' + u + ':' + c + ':' + p);
   const result = await waitForAuth();
   if (result) enterChat(result.username, result.msg);
@@ -875,6 +991,7 @@ function enterChat(uname, welcomeMsg) {
   renderOnlineUsers();
   ws.send('LIST:');
   appendDivider('── connected as ' + username + ' ──');
+  document.getElementById('msg-input').focus();
 }
 
 function showNotification(msg) {
