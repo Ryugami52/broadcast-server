@@ -98,7 +98,13 @@ var connectCmd = &cobra.Command{
 		scanner := bufio.NewScanner(os.Stdin)
 
 		// Connect to server first
-		conn, _, err := websocket.DefaultDialer.Dial("ws://"+serverAddr+"/ws", nil)
+		var wsURL string
+		if strings.Contains(serverAddr, "railway.app") || strings.Contains(serverAddr, "render.com") {
+			wsURL = "wss://" + serverAddr + "/ws"
+		} else {
+			wsURL = "ws://" + serverAddr + "/ws"
+		}
+		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		if err != nil {
 			log.Fatal("Connection failed:", err)
 		}
