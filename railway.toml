@@ -1,0 +1,6 @@
+[build]
+builder = "dockerfile"
+
+[deploy]
+startCommand = "./broadcast-server start"
+restartPolicyType = "on_failure"
