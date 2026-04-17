@@ -174,6 +174,15 @@ func (c *Client) readPump(s *Server) {
 				c.send <- []byte("AUTH_FAIL:" + err.Error())
 				continue
 			}
+			// Check if already logged in
+			s.mu.Lock()
+			_, alreadyOnline := s.userMap[user.Username]
+			s.mu.Unlock()
+
+			if alreadyOnline {
+				c.send <- []byte("AUTH_FAIL:User is already logged in from another session.")
+				continue
+			}
 			c.username = user.Username
 			c.authenticated = true
 			s.mu.Lock()
