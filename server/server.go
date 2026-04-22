@@ -21,11 +21,13 @@ type Client struct {
 	send          chan []byte
 	username      string
 	authenticated bool
+	room          string // current room, "public" by default
 }
 
 type Server struct {
 	clients      map[*Client]bool
 	userMap      map[string]*Client
+	roomMap      map[string]map[*Client]bool // room -> set of clients
 	broadcast    chan []byte
 	register     chan *Client
 	unregister   chan *Client
@@ -46,6 +48,7 @@ func NewServer(mongoURI, dbName string) *Server {
 	return &Server{
 		clients:      make(map[*Client]bool),
 		userMap:      make(map[string]*Client),
+		roomMap:      make(map[string]map[*Client]bool),
 		broadcast:    make(chan []byte),
 		register:     make(chan *Client),
 		unregister:   make(chan *Client),
@@ -53,6 +56,37 @@ func NewServer(mongoURI, dbName string) *Server {
 		userStore:    store,
 		historyStore: historyStore,
 	}
+}
+
+// broadcastToRoom sends a message to all clients in a specific room
+func (s *Server) broadcastToRoom(room string, message []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for client := range s.roomMap[room] {
+		select {
+		case client.send <- message:
+		default:
+			close(client.send)
+			delete(s.clients, client)
+			delete(s.roomMap[room], client)
+		}
+	}
+}
+
+// joinRoom moves a client from their current room to a new room
+func (s *Server) joinRoom(c *Client, newRoom string) {
+	s.mu.Lock()
+	// Leave current room
+	if c.room != "" {
+		delete(s.roomMap[c.room], c)
+	}
+	// Join new room
+	if s.roomMap[newRoom] == nil {
+		s.roomMap[newRoom] = make(map[*Client]bool)
+	}
+	s.roomMap[newRoom][c] = true
+	c.room = newRoom
+	s.mu.Unlock()
 }
 
 func (s *Server) Run() {
@@ -63,8 +97,11 @@ func (s *Server) Run() {
 			s.clients[client] = true
 			s.mu.Unlock()
 
+			// Put in public room by default
+			s.joinRoom(client, "public")
+
 			// Load public history from MongoDB
-			messages, err := s.historyStore.GetLast("public", 10)
+			messages, err := s.historyStore.GetLast("room:public", 10)
 			if err == nil && len(messages) > 0 {
 				client.send <- []byte("--- Last messages ---")
 				for _, msg := range messages {
@@ -75,12 +112,16 @@ func (s *Server) Run() {
 			}
 
 			fmt.Println("New client connected. Total:", len(s.clients))
+
 		case client := <-s.unregister:
 			s.mu.Lock()
 			if _, ok := s.clients[client]; ok {
 				delete(s.clients, client)
 				if client.username != "" {
 					delete(s.userMap, client.username)
+				}
+				if client.room != "" {
+					delete(s.roomMap[client.room], client)
 				}
 				close(client.send)
 			}
@@ -92,7 +133,6 @@ func (s *Server) Run() {
 			if len(s.history) > 10 {
 				s.history = s.history[1:]
 			}
-
 			s.mu.Lock()
 			for client := range s.clients {
 				select {
@@ -123,8 +163,9 @@ func (s *Server) HandleConnection(w http.ResponseWriter, r *http.Request) {
 
 func (c *Client) readPump(s *Server) {
 	defer func() {
-		if c.username != "" {
-			s.broadcast <- []byte(c.username + " has left the chat.")
+		if c.username != "" && c.room != "" {
+			msg := fmt.Sprintf("[%s] %s has left.", c.room, c.username)
+			s.broadcastToRoom(c.room, []byte(msg))
 		}
 		s.unregister <- c
 		c.conn.Close()
@@ -138,7 +179,7 @@ func (c *Client) readPump(s *Server) {
 
 		text := string(message)
 
-		// Handle REGISTER:username:contact:password
+		// Handle REGISTER
 		if strings.HasPrefix(text, "REGISTER:") {
 			parts := strings.SplitN(text, ":", 4)
 			if len(parts) != 4 {
@@ -157,11 +198,11 @@ func (c *Client) readPump(s *Server) {
 			s.userMap[username] = c
 			s.mu.Unlock()
 			c.send <- []byte("AUTH_OK:" + username + ":Welcome! You are now registered and connected.")
-			s.broadcast <- []byte(username + " has joined the chat!")
+			s.broadcastToRoom("public", []byte(username+" has joined the chat!"))
 			continue
 		}
 
-		// Handle LOGIN:username:password
+		// Handle LOGIN
 		if strings.HasPrefix(text, "LOGIN:") {
 			parts := strings.SplitN(text, ":", 3)
 			if len(parts) != 3 {
@@ -174,11 +215,9 @@ func (c *Client) readPump(s *Server) {
 				c.send <- []byte("AUTH_FAIL:" + err.Error())
 				continue
 			}
-			// Check if already logged in
 			s.mu.Lock()
 			_, alreadyOnline := s.userMap[user.Username]
 			s.mu.Unlock()
-
 			if alreadyOnline {
 				c.send <- []byte("AUTH_FAIL:User is already logged in from another session.")
 				continue
@@ -189,7 +228,7 @@ func (c *Client) readPump(s *Server) {
 			s.userMap[user.Username] = c
 			s.mu.Unlock()
 			c.send <- []byte("AUTH_OK:" + user.Username + ":Welcome back " + user.Username + "!")
-			s.broadcast <- []byte(user.Username + " has joined the chat!")
+			s.broadcastToRoom("public", []byte(user.Username+" has joined the chat!"))
 			continue
 		}
 
@@ -213,33 +252,57 @@ func (c *Client) readPump(s *Server) {
 			continue
 		}
 
-		// Handle PRIVATE:targetUser:message
-		if strings.HasPrefix(text, "PRIVATE:") {
-			parts := strings.SplitN(text, ":", 3)
-			if len(parts) == 3 {
-				targetUsername := parts[1]
-				privateMsg := parts[2]
-
-				s.mu.Lock()
-				target, ok := s.userMap[targetUsername]
-				s.mu.Unlock()
-
-				if ok {
-					// Save to history
-					room := "private:" + c.username + ":" + targetUsername
-					go s.historyStore.Save(room, c.username, privateMsg)
-
-					target.send <- []byte("PRIVATE_FROM:" + c.username + ":" + privateMsg)
-					c.send <- []byte("PRIVATE_TO:" + targetUsername + ":" + privateMsg)
+		// Handle JOINROOM:roomname
+		if strings.HasPrefix(text, "JOINROOM:") {
+			roomName := strings.TrimSpace(text[9:])
+			if roomName == "" || strings.Contains(roomName, ":") {
+				c.send <- []byte("SYSTEM:Invalid room name.")
+				continue
+			}
+			oldRoom := c.room
+			// Notify old room
+			if oldRoom != "" {
+				s.broadcastToRoom(oldRoom, []byte(c.username+" left #"+oldRoom))
+			}
+			s.joinRoom(c, roomName)
+			// Notify new room
+			s.broadcastToRoom(roomName, []byte(c.username+" joined #"+roomName+"!"))
+			// Send room history
+			messages, err := s.historyStore.GetLast("room:"+roomName, 10)
+			if err == nil && len(messages) > 0 {
+				c.send <- []byte("ROOM_HISTORY_START:" + roomName)
+				for _, msg := range messages {
+					line := fmt.Sprintf("ROOM_MSG:%s:[%s] %s",
+						roomName,
+						msg.Timestamp.Format("15:04:05"),
+						msg.Content)
+					c.send <- []byte(line)
 				}
-
+				c.send <- []byte("ROOM_HISTORY_END:" + roomName)
+			} else {
+				c.send <- []byte("ROOM_JOINED:" + roomName)
 			}
 			continue
 		}
+
+		// Handle LISTROOMS
+		if text == "LISTROOMS:" {
+			s.mu.Lock()
+			rooms := []string{}
+			for room, members := range s.roomMap {
+				if len(members) > 0 {
+					rooms = append(rooms, fmt.Sprintf("%s(%d)", room, len(members)))
+				}
+			}
+			s.mu.Unlock()
+			c.send <- []byte("SYSTEM:Active rooms: " + strings.Join(rooms, ", "))
+			continue
+		}
+
+		// Handle HISTORY (private)
 		if strings.HasPrefix(text, "HISTORY:") {
 			targetUsername := text[8:]
 			room := "private:" + c.username + ":" + targetUsername
-			// Also check reverse order
 			messages, err := s.historyStore.GetLast(room, 20)
 			if err == nil && len(messages) == 0 {
 				room = "private:" + targetUsername + ":" + c.username
@@ -257,14 +320,36 @@ func (c *Client) readPump(s *Server) {
 			continue
 		}
 
-		go s.historyStore.Save("public", c.username, text)
-		s.broadcast <- message
+		// Handle PRIVATE
+		if strings.HasPrefix(text, "PRIVATE:") {
+			parts := strings.SplitN(text, ":", 3)
+			if len(parts) == 3 {
+				targetUsername := parts[1]
+				privateMsg := parts[2]
+				s.mu.Lock()
+				target, ok := s.userMap[targetUsername]
+				s.mu.Unlock()
+				if ok {
+					room := "private:" + c.username + ":" + targetUsername
+					go s.historyStore.Save(room, c.username, privateMsg)
+					target.send <- []byte("PRIVATE_FROM:" + c.username + ":" + privateMsg)
+					c.send <- []byte("PRIVATE_TO:" + targetUsername + ":" + privateMsg)
+				} else {
+					c.send <- []byte("SYSTEM:User " + targetUsername + " not found or offline.")
+				}
+			}
+			continue
+		}
+
+		// Public/room message
+		roomKey := "room:" + c.room
+		go s.historyStore.Save(roomKey, c.username, text)
+		s.broadcastToRoom(c.room, message)
 	}
 }
 
 func (c *Client) writePump() {
 	defer c.conn.Close()
-
 	for message := range c.send {
 		err := c.conn.WriteMessage(websocket.TextMessage, message)
 		if err != nil {

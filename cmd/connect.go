@@ -14,11 +14,13 @@ import (
 
 var serverAddr string
 
-var mode = "public"
+var mode = "public" // "public", "private", "room"
 var privateTarget = ""
+var currentRoom = "public"
 
 var publicHistory []string
 var privateHistory = map[string][]string{}
+var roomHistory = map[string][]string{}
 
 func clearScreen() {
 	fmt.Print("\033[H\033[2J")
@@ -27,7 +29,7 @@ func clearScreen() {
 func printPublicHistory() {
 	clearScreen()
 	fmt.Println("=== Public Chat ===")
-	fmt.Println("Commands: /msg <username> | /list | /exit")
+	fmt.Println("Commands: /msg <user> | /room <name> | /listrooms | /list | /exit")
 	fmt.Println("-------------------")
 	for _, line := range publicHistory {
 		fmt.Println(line)
@@ -37,9 +39,19 @@ func printPublicHistory() {
 func printPrivateHistory(target string) {
 	clearScreen()
 	fmt.Printf("=== Private Chat with %s ===\n", target)
-	fmt.Println("Type /exit to go back to public chat")
+	fmt.Println("Type /exit to go back")
 	fmt.Println("-------------------")
 	for _, line := range privateHistory[target] {
+		fmt.Println(line)
+	}
+}
+
+func printRoomHistory(room string) {
+	clearScreen()
+	fmt.Printf("=== Room: #%s ===\n", room)
+	fmt.Println("Type /exit to go back to public")
+	fmt.Println("-------------------")
+	for _, line := range roomHistory[room] {
 		fmt.Println(line)
 	}
 }
@@ -51,17 +63,11 @@ func readPassword(scanner *bufio.Scanner, prompt string) string {
 }
 
 func isValidEmail(email string) bool {
-	if len(email) > 254 {
-		return false
-	}
-	if strings.Contains(email, " ") {
+	if len(email) > 254 || strings.Contains(email, " ") {
 		return false
 	}
 	parts := strings.Split(email, "@")
-	if len(parts) != 2 {
-		return false
-	}
-	if len(parts[0]) == 0 {
+	if len(parts) != 2 || len(parts[0]) == 0 {
 		return false
 	}
 	domainParts := strings.Split(parts[1], ".")
@@ -77,10 +83,7 @@ func isValidEmail(email string) bool {
 }
 
 func isValidPhone(phone string) bool {
-	if strings.Contains(phone, " ") {
-		return false
-	}
-	if len(phone) < 7 || len(phone) > 15 {
+	if strings.Contains(phone, " ") || len(phone) < 7 || len(phone) > 15 {
 		return false
 	}
 	for _, c := range phone {
@@ -97,7 +100,6 @@ var connectCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		scanner := bufio.NewScanner(os.Stdin)
 
-		// Connect to server first
 		var wsURL string
 		if strings.Contains(serverAddr, "railway.app") || strings.Contains(serverAddr, "render.com") {
 			wsURL = "wss://" + serverAddr + "/ws"
@@ -119,9 +121,7 @@ var connectCmd = &cobra.Command{
 		var username string
 
 		if isNew == "yes" {
-			// Registration flow
 			fmt.Println("\n--- Register ---")
-
 			for {
 				fmt.Print("Choose a username (3-20 chars, no spaces): ")
 				scanner.Scan()
@@ -140,7 +140,6 @@ var connectCmd = &cobra.Command{
 				}
 				break
 			}
-
 			var contact string
 			for {
 				fmt.Print("Enter email or phone number: ")
@@ -159,7 +158,6 @@ var connectCmd = &cobra.Command{
 				}
 				break
 			}
-
 			var password string
 			for {
 				password = readPassword(scanner, "Choose a password (min 6 chars): ")
@@ -169,28 +167,22 @@ var connectCmd = &cobra.Command{
 				}
 				break
 			}
-
 			authMsg = fmt.Sprintf("REGISTER:%s:%s:%s", username, contact, password)
-
 		} else {
-			// Login flow
 			fmt.Println("\n--- Login ---")
-
 			fmt.Print("Username: ")
 			scanner.Scan()
 			username = strings.TrimSpace(scanner.Text())
-
 			password := readPassword(scanner, "Password: ")
 			authMsg = fmt.Sprintf("LOGIN:%s:%s", username, password)
 		}
 
-		// Send auth message to server
 		conn.WriteMessage(websocket.TextMessage, []byte(authMsg))
 
 		done := make(chan struct{})
 		authOK := make(chan string, 1)
 
-		// Goroutine: receive messages
+		// Receive goroutine
 		go func() {
 			defer close(done)
 			for {
@@ -202,7 +194,6 @@ var connectCmd = &cobra.Command{
 				text := string(message)
 				t := time.Now().Format("15:04:05")
 
-				// Auth success
 				if strings.HasPrefix(text, "AUTH_OK:") {
 					parts := strings.SplitN(text, ":", 3)
 					if len(parts) == 3 {
@@ -211,17 +202,56 @@ var connectCmd = &cobra.Command{
 					continue
 				}
 
-				// Auth failure
-				// Auth failure
 				if strings.HasPrefix(text, "AUTH_FAIL:") {
 					fmt.Println("\n❌", text[10:])
 					fmt.Println("Please restart and try again.")
-					authOK <- "error:" // unblock the main goroutine
+					authOK <- "error:"
 					conn.Close()
 					return
 				}
 
-				// Private message received
+				// Room joined confirmation
+				if strings.HasPrefix(text, "ROOM_JOINED:") {
+					room := text[12:]
+					currentRoom = room
+					mode = "room"
+					printRoomHistory(room)
+					fmt.Printf("✅ Joined #%s\n", room)
+					continue
+				}
+
+				// Room history start
+				if strings.HasPrefix(text, "ROOM_HISTORY_START:") {
+					room := text[19:]
+					currentRoom = room
+					mode = "room"
+					printRoomHistory(room)
+					fmt.Printf("✅ Joined #%s — history:\n", room)
+					continue
+				}
+
+				// Room history end
+				if strings.HasPrefix(text, "ROOM_HISTORY_END:") {
+					continue
+				}
+
+				// Room message (history or live)
+				if strings.HasPrefix(text, "ROOM_MSG:") {
+					parts := strings.SplitN(text, ":", 3)
+					if len(parts) == 3 {
+						room := parts[1]
+						content := parts[2]
+						line := fmt.Sprintf(">> [%s] %s", t, content)
+						roomHistory[room] = append(roomHistory[room], line)
+						if mode == "room" && currentRoom == room {
+							fmt.Println(line)
+						} else {
+							fmt.Printf("\n** New message in #%s - type /room %s to open **\n", room, room)
+						}
+					}
+					continue
+				}
+
 				if strings.HasPrefix(text, "PRIVATE_FROM:") {
 					parts := strings.SplitN(text, ":", 3)
 					if len(parts) == 3 {
@@ -238,7 +268,6 @@ var connectCmd = &cobra.Command{
 					continue
 				}
 
-				// Confirmation of own private message
 				if strings.HasPrefix(text, "PRIVATE_TO:") {
 					parts := strings.SplitN(text, ":", 3)
 					if len(parts) == 3 {
@@ -273,7 +302,6 @@ var connectCmd = &cobra.Command{
 					continue
 				}
 
-				// System message
 				if strings.HasPrefix(text, "SYSTEM:") {
 					fmt.Println("**", text[7:], "**")
 					continue
@@ -290,12 +318,12 @@ var connectCmd = &cobra.Command{
 			}
 		}()
 
-		// Wait for auth result
+		// Wait for auth
 		payload := <-authOK
 		parts := strings.SplitN(payload, ":", 2)
 		if len(parts) == 2 {
 			if parts[0] == "error" {
-				<-done // wait for goroutine to finish
+				<-done
 				return
 			}
 			username = parts[0]
@@ -310,6 +338,24 @@ var connectCmd = &cobra.Command{
 				continue
 			}
 
+			// Join a room
+			if strings.HasPrefix(text, "/room ") {
+				roomName := strings.TrimSpace(strings.TrimPrefix(text, "/room "))
+				if roomName == "" {
+					fmt.Println("Usage: /room <roomname>")
+					continue
+				}
+				conn.WriteMessage(websocket.TextMessage, []byte("JOINROOM:"+roomName))
+				continue
+			}
+
+			// List active rooms
+			if text == "/listrooms" {
+				conn.WriteMessage(websocket.TextMessage, []byte("LISTROOMS:"))
+				continue
+			}
+
+			// Private chat
 			if strings.HasPrefix(text, "/msg ") {
 				target := strings.TrimSpace(strings.TrimPrefix(text, "/msg "))
 				if target == "" {
@@ -318,15 +364,16 @@ var connectCmd = &cobra.Command{
 				}
 				mode = "private"
 				privateTarget = target
-				// Request private history from server
 				conn.WriteMessage(websocket.TextMessage, []byte("HISTORY:"+target))
 				printPrivateHistory(target)
 				continue
 			}
 
+			// Exit back to public
 			if text == "/exit" {
 				mode = "public"
 				privateTarget = ""
+				currentRoom = "public"
 				printPublicHistory()
 				continue
 			}
@@ -336,6 +383,7 @@ var connectCmd = &cobra.Command{
 				continue
 			}
 
+			// Send message based on mode
 			if mode == "private" {
 				msg := fmt.Sprintf("PRIVATE:%s:%s", privateTarget, text)
 				err := conn.WriteMessage(websocket.TextMessage, []byte(msg))
@@ -344,6 +392,8 @@ var connectCmd = &cobra.Command{
 					break
 				}
 			} else {
+				// Both public and room messages go as regular messages
+				// server routes to correct room based on client's current room
 				message := fmt.Sprintf("[%s]: %s", username, text)
 				err := conn.WriteMessage(websocket.TextMessage, []byte(message))
 				if err != nil {
